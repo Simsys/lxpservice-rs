@@ -1,0 +1,314 @@
+use crate::logger;
+use crate::lxpapi;
+use crate::lxpconfig;
+use crate::lxptypes;
+use log::*;
+use std::fs::File;
+use std::io::prelude::*;
+
+#[derive(Debug)]
+pub struct LxpCommands {
+    config: lxpconfig::LxpConfig,
+    api: lxpapi::LxpApi,
+}
+
+impl LxpCommands {
+    pub fn new(app_name: &str, verbose_level: u64) -> LxpCommands {
+        match verbose_level {
+            0 => {
+                logger::init(app_name, LevelFilter::Info).unwrap();
+                debug!("Verbose Flag is not set");
+            }
+            1 => {
+                logger::init(app_name, LevelFilter::Debug).unwrap();
+                debug!("Verbose Mode is set to DEBUG");
+            }
+            2 | _ => {
+                logger::init(app_name, LevelFilter::Trace).unwrap();
+                debug!("Verbose Mode is set to TRACE");
+            }
+        }
+        let config = lxpconfig::LxpConfig::new(app_name);
+        // Get profile and instanciate api
+        let profile = config.get_active_profile().unwrap();
+        let api = lxpapi::LxpApi::new(&profile.user_name, &profile.api_key, &profile.url);
+        LxpCommands { config, api }
+    }
+
+    pub fn profile_new(&mut self, profile_name: &str, user_name: &str, url: &str, api_key: &str) {
+        debug!(
+            "New profile {}, user '{}', url '{}' and <api_key>",
+            profile_name, user_name, url
+        );
+        let profile = lxpconfig::Profile {
+            user_name: user_name.into(),
+            url: url.into(),
+            api_key: api_key.into(),
+        };
+        self.config.new_profile(profile_name, profile);
+    }
+
+    pub fn profile_delete(&mut self, profile_name: &str) {
+        self.config.delete_profile(profile_name);
+    }
+
+    pub fn profile_delete_all(&mut self) {
+        self.config.delete_all_profiles();
+    }
+
+    pub fn profile_switch(&mut self, profile_name: &str) {
+        self.config.switch_profile(profile_name);
+    }
+
+    pub fn profile_show(&mut self) {
+        self.config.show_profiles();
+    }
+
+    fn _invoice_write_pdf_file(&self, r: lxptypes::Response, pdf_file: Vec<u8>) {
+        let profile_name = self.config.get_active_profile_name().unwrap();
+        match &r.invoice {
+            Some(invoice) => {
+                let file_name: String =
+                    format!("{}_{}-invoice.pdf", invoice.invoicedate, &profile_name);
+                info!("Writing file '{}'", file_name);
+                let mut buffer = File::create(file_name).expect("Could not create PDF file");
+                buffer
+                    .write_all(&pdf_file)
+                    .expect("Could not write PDF file");
+            }
+            None => error!("<No data>"),
+        }
+    }
+
+    pub async fn invoide_list(&self) {
+        match self.api.list_invoices().await {
+            Ok(r) => match &r.invoices {
+                Some(invoices) => {
+                    info!("\n{:<10} {:>6} {:>8}", "Date", "Id", "Cost");
+                    for (_key, invoice) in invoices {
+                        let cost = invoice.sum.parse::<f64>().unwrap()
+                            + invoice.vat.parse::<f64>().unwrap();
+                        info!(
+                            "{:<10} {:>6} {:>6.2} €",
+                            &invoice.invoicedate, &invoice.iid, &cost,
+                        )
+                    }
+                }
+                None => info!("<No data>"),
+            },
+            Err(e) => error!("Error when getting invoice list {}", e),
+        }
+    }
+
+    pub async fn invoice_get_last(&mut self) {
+        match self.api.get_last_invoice().await {
+            Ok(r) => self._invoice_write_pdf_file(r.0, r.1),
+            Err(e) => error!("Error when getting invoice {}", e),
+        }
+    }
+
+    pub async fn invoice_get_by_id(&mut self, id: &str) {
+        match id.parse::<i32>() {
+            Ok(id) => {
+                debug!("Storing invoice, ID: {}", id);
+                match self.api.get_invoice(id).await {
+                    Ok(r) => self._invoice_write_pdf_file(r.0, r.1),
+                    Err(e) => error!("Error when getting invoice {}", e),
+                }
+            }
+            Err(e) => {
+                error!("Invoice id must be Integer: Error Message '{}'", e);
+            }
+        }
+    }
+
+    fn _job_show_list(&self, r: lxptypes::Response) {
+        match &r.jobs {
+            Some(jobs) => {
+                let mut sum_cost: f64 = 0.0;
+                info!(
+                    "\n{:<10} {:>6} {:>3} {:>3} {:>3} {:>3} {:>4} {:<35}",
+                    "Date", "Id", "Pgs", "Col", "Dpx", "Shp", "Cost", "Filename"
+                );
+                for (_key, job) in jobs {
+                    let cost =
+                        job.cost.parse::<f64>().unwrap() + job.cost_vat.parse::<f64>().unwrap();
+                    sum_cost += cost;
+                    info!(
+                        "{:<10} {:>6} {:>3} {:>3} {:>3} {:>3} {:>4.2} {:<35}",
+                        &job.date[..10],
+                        &job.jid,
+                        &job.pages,
+                        &job.color,
+                        &job.mode[..3],
+                        &job.shipping[..3],
+                        &cost,
+                        &job.address
+                    )
+                }
+                info!("The sum of the costs is {:.2} €", sum_cost)
+            }
+            None => info!("<No data>"),
+        }
+    }
+
+    async fn _job_show_lists(&self) -> Result<(), lxpapi::LxpApiError> {
+        let r = self.api.get_blance().await?;
+        info!("Credit balance {} €", r.balance.unwrap().value);
+
+        debug!("Check the status of the placed print jobs");
+        let r = self.api.get_jobs_queue(7).await?;
+        info!("\nThese letters will be sent soon:");
+        self._job_show_list(r);
+
+        let r = self.api.get_jobs_hold().await?;
+        info!("\nThese letters are in the queue (credit exhausted):");
+        self._job_show_list(r);
+
+        let r = self.api.get_jobs_sent(7).await?;
+        info!("\nThese letters are sent in the last 7 days:");
+        self._job_show_list(r);
+        Ok(())
+    }
+
+    pub async fn job_overview(&self) {
+        info!(
+            "Active profile '{}'",
+            match self.config.get_active_profile_name() {
+                Some(user) => user,
+                None => String::from("<No active profile>"),
+            }
+        );
+
+        match self._job_show_lists().await {
+            Ok(()) => {}
+            Err(e) => error!("Error in rest service {}", e),
+        }
+    }
+
+    async fn _job_delete_by_id(&self, id: i32, file_name: &str) {
+        match self.api.delete_job(id).await {
+            Ok(r) => match r.status {
+                200 => info!("  Job id {} {} deleted", id, file_name),
+                404 => error!("Job Id {} not found", id),
+                _ => error!("Don't know wat to do with status {}", r.status),
+            },
+            Err(e) => error!("Error in server connection {}", e),
+        }
+    }
+
+    async fn _jobs_delete_list(&self, r: lxptypes::Response) -> i32 {
+        let mut jobs_deleted: i32 = 0;
+        match &r.jobs {
+            Some(jobs) => {
+                for (_key, job) in jobs {
+                    let id = job
+                        .jid
+                        .parse::<i32>()
+                        .expect("Job id must be integer, error in JSON string");
+                    self._job_delete_by_id(id, &job.address).await;
+                    jobs_deleted += 1;
+                }
+            }
+            None => (),
+        }
+        jobs_deleted
+    }
+
+    pub async fn job_delete_all(&self) {
+        let mut jobs_deleted: i32 = match self.api.get_jobs_queue(7).await {
+            Ok(r) => self._jobs_delete_list(r).await,
+            Err(e) => {
+                error!("{}", e);
+                0
+            }
+        };
+
+        jobs_deleted += match self.api.get_jobs_hold().await {
+            Ok(r) => self._jobs_delete_list(r).await,
+            Err(e) => {
+                error!("{}", e);
+                0
+            }
+        };
+        info!("{} job(s) deleted", jobs_deleted)
+    }
+
+    pub async fn job_delete_by_id(&self, id_arg: &str) {
+        let id = match id_arg.parse::<i32>() {
+            Ok(id) => {
+                debug!("Deleting a single print job on server, ID: {}", id);
+                id
+            }
+            Err(e) => {
+                error!("Deleting id must be Integer: Error Message '{}'", e);
+                0
+            }
+        };
+        self._job_delete_by_id(id, "").await;
+    }
+
+    async fn _job_set(
+        &self,
+        file_name: &str,
+        black_and_white: bool,
+        duplex: bool,
+        international: bool,
+    ) {
+        let start = &file_name.len() - 4;
+        let file_type = &file_name[start..];
+        if file_type.to_lowercase() != ".pdf" {
+            return;
+        };
+
+        let mut color = lxptypes::ColorPrint::Color;
+        if black_and_white {
+            color = lxptypes::ColorPrint::BlackAndWhite
+        }
+        let mut mode = lxptypes::Mode::Simplex;
+        if duplex {
+            mode = lxptypes::Mode::Duplex
+        }
+        let mut ship = lxptypes::Ship::National;
+        if international {
+            ship = lxptypes::Ship::International
+        }
+
+        match self.api.set_job(&file_name, &color, &mode, &ship).await {
+            Ok(_r) => info!("  Job {} sent", file_name),
+            Err(e) => error!("Error setting a job: {}", e),
+        }
+    }
+
+    pub async fn job_set_fil_or_dir(
+        &self,
+        file_or_dir_name: &str,
+        black_and_white: bool,
+        duplex: bool,
+        international: bool,
+    ) {
+        match std::fs::metadata(file_or_dir_name) {
+            Ok(md) => {
+                if md.is_file() {
+                    self._job_set(file_or_dir_name, black_and_white, duplex, international)
+                        .await;
+                };
+                if md.is_dir() {
+                    if let Ok(entries) = std::fs::read_dir(file_or_dir_name) {
+                        for entry in entries {
+                            if let Ok(entry) = entry {
+                                let path = entry.path();
+                                if path.is_file() {
+                                    let p = path.to_str().unwrap();
+                                    self._job_set(&p, black_and_white, duplex, international)
+                                        .await;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => error!("Opening send file: {}", e),
+        };
+    }
+}
