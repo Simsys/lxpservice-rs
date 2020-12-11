@@ -1,1 +1,6 @@
+/.vscode
 /target
+/pdf_dir
+*.pdf
+deploy_local
+*.log

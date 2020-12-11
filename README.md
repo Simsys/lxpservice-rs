@@ -84,11 +84,6 @@ Switch to a given profile
 $ lxpservice profile -s <profile_name>
 ````
 
-Switch to a given profile
-````
-$ lxpservice profile -s <profile_name>
-````
-
 Show all profiles
 ````
 $ lxpservice profile -o
