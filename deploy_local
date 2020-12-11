@@ -1,6 +1,0 @@
-#!/bin/bash
-
-set -x # echo on
-cargo build --release
-strip target/release/lxpservice
-cp target/release/lxpservice ~/.bin/lxp
