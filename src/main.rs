@@ -37,10 +37,6 @@ async fn main() {
         if matches.is_present("overview") {
             lxp_cmds.profile_show();
         }
-        // Exit after handling profiles because of possible errors. You can easyly delete
-        // all profiles and try afterwords to get an api instanciated. It is also not possible
-        // to do something useful after the profile subcommand. Hence best is to exit program.
-        std::process::exit(0);
     }
 
     // handle subcommand invoice
