@@ -39,7 +39,7 @@ impl fmt::Display for LxpApiError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             LxpApiError::RestError => write!(f, "Web service: check url, user and apikey "), // user-facing output
-            LxpApiError::JsonError => write!(f, "Internal JSON error, please the developer"), // user-facing output
+            LxpApiError::JsonError => write!(f, "Internal JSON error, please inform the developers"), // user-facing output
         }
     }
 }
