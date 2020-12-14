@@ -6,10 +6,10 @@ use log::*;
 use std::fs::File;
 use std::io::prelude::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LxpCommands {
     config: lxpconfig::LxpConfig,
-    api: lxpapi::LxpApi,
+    api_ref: Option<lxpapi::LxpApi>,
 }
 
 impl LxpCommands {
@@ -29,17 +29,27 @@ impl LxpCommands {
             }
         }
         let config = lxpconfig::LxpConfig::new(app_name);
-        // Get profile and instanciate api
-        let profile = config.get_active_profile().unwrap();
-        let api = lxpapi::LxpApi::new(&profile.user_name, &profile.api_key, &profile.url);
-        LxpCommands { config, api }
+        LxpCommands { config, api_ref: None }
+    }
+
+    fn api(&mut self) -> lxpapi::LxpApi {
+        match &self.api_ref {
+            Some(_api) => (),
+            None => {
+                // Get profile and instanciate api
+                let profile = self.config.get_active_profile().unwrap();
+                self.api_ref = Some(lxpapi::LxpApi::new(&profile.user_name, &profile.api_key, &profile.url))
+            },
+        };
+        self.api_ref.clone().unwrap()
     }
 
     pub fn profile_new(&mut self, profile_name: &str, user_name: &str, url: &str, api_key: &str) {
-        debug!(
+        info!(
             "New profile {}, user '{}', url '{}' and <api_key>",
             profile_name, user_name, url
         );
+        info!("Active profile ist set to '{}'", profile_name);
         let profile = lxpconfig::Profile {
             user_name: user_name.into(),
             url: url.into(),
@@ -80,8 +90,8 @@ impl LxpCommands {
         }
     }
 
-    pub async fn invoide_list(&self) {
-        match self.api.list_invoices().await {
+    pub async fn invoide_list(&mut self) {
+        match self.api().list_invoices().await {
             Ok(r) => match &r.invoices {
                 Some(invoices) => {
                     info!("\n{:<10} {:>6} {:>8}", "Date", "Id", "Cost");
@@ -101,7 +111,7 @@ impl LxpCommands {
     }
 
     pub async fn invoice_get_last(&mut self) {
-        match self.api.get_last_invoice().await {
+        match self.api().get_last_invoice().await {
             Ok(r) => self._invoice_write_pdf_file(r.0, r.1),
             Err(e) => error!("Error when getting invoice {}", e),
         }
@@ -111,7 +121,7 @@ impl LxpCommands {
         match id.parse::<i32>() {
             Ok(id) => {
                 debug!("Storing invoice, ID: {}", id);
-                match self.api.get_invoice(id).await {
+                match self.api().get_invoice(id).await {
                     Ok(r) => self._invoice_write_pdf_file(r.0, r.1),
                     Err(e) => error!("Error when getting invoice {}", e),
                 }
@@ -152,26 +162,26 @@ impl LxpCommands {
         }
     }
 
-    async fn _job_show_lists(&self) -> Result<(), lxpapi::LxpApiError> {
-        let r = self.api.get_blance().await?;
+    async fn _job_show_lists(&mut self) -> Result<(), lxpapi::LxpApiError> {
+        let r = self.api().get_blance().await?;
         info!("Credit balance {} €", r.balance.unwrap().value);
 
         debug!("Check the status of the placed print jobs");
-        let r = self.api.get_jobs_queue(7).await?;
+        let r = self.api().get_jobs_queue(7).await?;
         info!("\nThese letters will be sent soon:");
         self._job_show_list(r);
 
-        let r = self.api.get_jobs_hold().await?;
+        let r = self.api().get_jobs_hold().await?;
         info!("\nThese letters are in the queue (credit exhausted):");
         self._job_show_list(r);
 
-        let r = self.api.get_jobs_sent(7).await?;
+        let r = self.api().get_jobs_sent(7).await?;
         info!("\nThese letters are sent in the last 7 days:");
         self._job_show_list(r);
         Ok(())
     }
 
-    pub async fn job_overview(&self) {
+    pub async fn job_overview(&mut self) {
         info!(
             "Active profile '{}'",
             match self.config.get_active_profile_name() {
@@ -186,8 +196,8 @@ impl LxpCommands {
         }
     }
 
-    async fn _job_delete_by_id(&self, id: i32, file_name: &str) {
-        match self.api.delete_job(id).await {
+    async fn _job_delete_by_id(&mut self, id: i32, file_name: &str) {
+        match self.api().delete_job(id).await {
             Ok(r) => match r.status {
                 200 => info!("  Job id {} {} deleted", id, file_name),
                 404 => error!("Job Id {} not found", id),
@@ -197,7 +207,7 @@ impl LxpCommands {
         }
     }
 
-    async fn _jobs_delete_list(&self, r: lxptypes::Response) -> i32 {
+    async fn _jobs_delete_list(&mut self, r: lxptypes::Response) -> i32 {
         let mut jobs_deleted: i32 = 0;
         match &r.jobs {
             Some(jobs) => {
@@ -215,8 +225,8 @@ impl LxpCommands {
         jobs_deleted
     }
 
-    pub async fn job_delete_all(&self) {
-        let mut jobs_deleted: i32 = match self.api.get_jobs_queue(7).await {
+    pub async fn job_delete_all(&mut self) {
+        let mut jobs_deleted: i32 = match self.api().get_jobs_queue(7).await {
             Ok(r) => self._jobs_delete_list(r).await,
             Err(e) => {
                 error!("{}", e);
@@ -224,7 +234,7 @@ impl LxpCommands {
             }
         };
 
-        jobs_deleted += match self.api.get_jobs_hold().await {
+        jobs_deleted += match self.api().get_jobs_hold().await {
             Ok(r) => self._jobs_delete_list(r).await,
             Err(e) => {
                 error!("{}", e);
@@ -234,7 +244,7 @@ impl LxpCommands {
         info!("{} job(s) deleted", jobs_deleted)
     }
 
-    pub async fn job_delete_by_id(&self, id_arg: &str) {
+    pub async fn job_delete_by_id(&mut self, id_arg: &str) {
         let id = match id_arg.parse::<i32>() {
             Ok(id) => {
                 debug!("Deleting a single print job on server, ID: {}", id);
@@ -249,7 +259,7 @@ impl LxpCommands {
     }
 
     async fn _job_set(
-        &self,
+        &mut self,
         file_name: &str,
         black_and_white: bool,
         duplex: bool,
@@ -274,14 +284,14 @@ impl LxpCommands {
             ship = lxptypes::Ship::International
         }
 
-        match self.api.set_job(&file_name, &color, &mode, &ship).await {
+        match self.api().set_job(&file_name, &color, &mode, &ship).await {
             Ok(_r) => info!("  Job {} sent", file_name),
             Err(e) => error!("Error setting a job: {}", e),
         }
     }
 
     pub async fn job_set_fil_or_dir(
-        &self,
+        &mut self,
         file_or_dir_name: &str,
         black_and_white: bool,
         duplex: bool,

@@ -6,7 +6,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Profile {
     pub user_name: String,
     pub url: String,
@@ -22,7 +22,7 @@ pub struct LxpConfig {
 
 impl LxpConfig {
     pub fn new(app_name: &str) -> LxpConfig {
-        match confy::load(app_name) {
+        match confy::load::<LxpConfig>(app_name) {
             Err(_e) => {
                 let lxp_config = LxpConfig {
                     app_name: app_name.into(),
@@ -33,7 +33,13 @@ impl LxpConfig {
                 error!("Could not read conifg file, new one created"); // exits app
                 return lxp_config;
             }
-            Ok(lxp_config) => return lxp_config,
+            Ok(mut lxp_config) => {
+                if lxp_config.app_name == "" {  // Set app_name on first run
+                    lxp_config.app_name = String::from(app_name);
+                    confy::store(app_name, &lxp_config).expect("Failed to write config file");
+                }
+                return lxp_config;
+            }
         };
     }
 
