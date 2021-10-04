@@ -117,7 +117,7 @@ deleted. You can also switch between them.
                 .arg(
                     Arg::with_name("overview")
                         .short("o")
-                        .long("information")
+                        .long("overview")
                         .help("Show informations about jobs on remote server"),
                 ),
         )
