@@ -3,7 +3,7 @@ use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 /// Define the command line interface
 pub fn cli_definition() -> ArgMatches<'static> {
     App::new("lxpservice")
-        .version("0.1")
+        .version("0.1.1")
         .author("Winfried Simon <winfried.simon@gmail.com>")
         .about("Command line tool to manage LetterXpress print jobs")
         .setting(AppSettings::ArgRequiredElseHelp)
