@@ -271,18 +271,18 @@ impl LxpCommands {
             return;
         };
 
-        let mut color = lxptypes::ColorPrint::Color;
-        if black_and_white {
-            color = lxptypes::ColorPrint::BlackAndWhite
-        }
-        let mut mode = lxptypes::Mode::Simplex;
-        if duplex {
-            mode = lxptypes::Mode::Duplex
-        }
-        let mut ship = lxptypes::Ship::National;
-        if international {
-            ship = lxptypes::Ship::International
-        }
+        let color = match black_and_white {
+            true => lxptypes::ColorPrint::BlackAndWhite,
+            false => lxptypes::ColorPrint::Color, 
+        };
+        let mode = match duplex {
+            true => lxptypes::Mode::Duplex,
+            false => lxptypes::Mode::Simplex,
+        };
+        let ship = match international {
+            true => lxptypes::Ship::International,
+            false => lxptypes::Ship::National,
+        };
 
         match self.api().set_job(&file_name, &color, &mode, &ship).await {
             Ok(_r) => info!("  Job {} sent", file_name),
