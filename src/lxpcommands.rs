@@ -268,6 +268,7 @@ impl LxpCommands {
         let start = &file_name.len() - 4;
         let file_type = &file_name[start..];
         if file_type.to_lowercase() != ".pdf" {
+            trace!("No PDF file - ignored {}", &file_name);
             return;
         };
 
