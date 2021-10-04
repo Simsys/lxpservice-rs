@@ -75,13 +75,21 @@ async fn main() {
 
     // handle subcommand set
     if let Some(matches) = matches.subcommand_matches("set") {
+        let color = match matches.is_present("black_and_white") {
+            true => lxptypes::ColorPrint::BlackAndWhite,
+            false => lxptypes::ColorPrint::Color, 
+        };
+        let mode = match matches.is_present("international") {
+            true => lxptypes::Mode::Duplex,
+            false => lxptypes::Mode::Simplex,
+        };
+        let ship = match matches.is_present("duplex") {
+            true => lxptypes::Ship::International,
+            false => lxptypes::Ship::National,
+        };
+        let file_or_dir_name = &matches.value_of("file_or_dir").unwrap().to_string();
         lxp_cmds
-            .job_set_fil_or_dir(
-                &matches.value_of("file_or_dir").unwrap().to_string(),
-                matches.is_present("black_and_white"),
-                matches.is_present("international"),
-                matches.is_present("duplex"),
-            )
+            .job_set_file_or_dir(&file_or_dir_name, color, mode, ship)
             .await;
     }
 }

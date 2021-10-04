@@ -5,6 +5,7 @@ use crate::lxptypes;
 use log::*;
 use std::fs::File;
 use std::io::prelude::*;
+use futures::{stream, StreamExt};
 
 #[derive(Debug, Clone)]
 pub struct LxpCommands {
@@ -258,64 +259,41 @@ impl LxpCommands {
         self._job_delete_by_id(id, "").await;
     }
 
-    async fn _job_set(
-        &mut self,
-        file_name: &str,
-        black_and_white: bool,
-        duplex: bool,
-        international: bool,
-    ) {
-        let start = &file_name.len() - 4;
-        let file_type = &file_name[start..];
-        if file_type.to_lowercase() != ".pdf" {
-            trace!("No PDF file - ignored {}", &file_name);
-            return;
-        };
-
-        let color = match black_and_white {
-            true => lxptypes::ColorPrint::BlackAndWhite,
-            false => lxptypes::ColorPrint::Color, 
-        };
-        let mode = match duplex {
-            true => lxptypes::Mode::Duplex,
-            false => lxptypes::Mode::Simplex,
-        };
-        let ship = match international {
-            true => lxptypes::Ship::International,
-            false => lxptypes::Ship::National,
-        };
-
-        match self.api().set_job(&file_name, &color, &mode, &ship).await {
-            Ok(_r) => info!("  Job {} sent", file_name),
-            Err(e) => error!("Error setting a job: {}", e),
-        }
-    }
-
-    pub async fn job_set_fil_or_dir(
+    pub async fn job_set_file_or_dir(
         &mut self,
         file_or_dir_name: &str,
-        black_and_white: bool,
-        duplex: bool,
-        international: bool,
+        color: lxptypes::ColorPrint,
+        mode: lxptypes::Mode,
+        ship: lxptypes::Ship,
     ) {
         match std::fs::metadata(file_or_dir_name) {
             Ok(md) => {
                 if md.is_file() {
-                    self._job_set(file_or_dir_name, black_and_white, duplex, international)
-                        .await;
+                    match self.api().set_job(&file_or_dir_name, &color, &mode, &ship).await {
+                        Ok(_r) => info!("  Job {} sent", &file_or_dir_name),
+                        Err(_) => (), // Error message was already issued by set_job()
+                    }
                 };
                 if md.is_dir() {
                     if let Ok(entries) = std::fs::read_dir(file_or_dir_name) {
-                        for entry in entries {
-                            if let Ok(entry) = entry {
-                                let path = entry.path();
-                                if path.is_file() {
-                                    let p = path.to_str().unwrap();
-                                    self._job_set(&p, black_and_white, duplex, international)
-                                        .await;
+                        let api = &self.api();
+                        let puts = stream::iter(
+                            entries.into_iter().map(|entry| {
+                                async move {
+                                    if let Ok(entry) = entry {
+                                        let path = entry.path();
+                                        if path.is_file() {
+                                            let p = path.to_str().unwrap();
+                                            match api.set_job(&p, &color, &mode, &ship).await {
+                                                Ok(_r) => info!("  Job {} sent", &p),
+                                                Err(_) => (), // Error message was already issued by set_job()
+                                            }
+                                        }
+                                    }                                
                                 }
-                            }
-                        }
+                            })
+                        ).buffer_unordered(10).collect::<Vec<()>>();  // 10 concurrent async requests
+                        puts.await;
                     }
                 }
             }

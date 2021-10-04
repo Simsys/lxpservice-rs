@@ -31,15 +31,18 @@ pub struct LxpApi {
 }
 
 pub enum LxpApiError {
+    PdfFileError,
     RestError,
     JsonError,
 }
 
+// user-facing output
 impl fmt::Display for LxpApiError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            LxpApiError::RestError => write!(f, "Web service: check url, user and apikey "), // user-facing output
-            LxpApiError::JsonError => write!(f, "Internal JSON error, please inform the developers"), // user-facing output
+            LxpApiError::PdfFileError => write!(f, "No PDF ile or file reading error"), 
+            LxpApiError::RestError => write!(f, "Web service: check url, user and apikey"),
+            LxpApiError::JsonError => write!(f, "Internal JSON error, please inform the developers"),
         }
     }
 }
@@ -152,16 +155,28 @@ impl LxpApi {
             Ship::International => letter.specification.ship = "international".into(),
             Ship::National => letter.specification.ship = "national".into(),
         }
+
+        if !file_name.to_lowercase().ends_with(".pdf") {
+            trace!("No PDF file - ignored {}", &file_name);
+            return Err(LxpApiError::PdfFileError);
+        };
+
         let path = std::path::Path::new(&file_name);
         let mut pdf_file = match std::fs::File::open(&path) {
-            Err(why) => panic!("couldn't open {}", why),
+            Err(why) => {
+                error!("couldn't open {}", why);
+                return Err(LxpApiError::PdfFileError);
+            },
             Ok(file) => file,
         };
         letter.address = path.file_name().unwrap().to_str().unwrap().to_string();
 
         let mut pdf_content = Vec::new();
         match pdf_file.read_to_end(&mut pdf_content) {
-            Err(why) => error!("Couldn't read PDF file {}", why),
+            Err(why) => {
+                error!("couldn't read {}", why);
+                return Err(LxpApiError::PdfFileError);
+            },
             Ok(_c) => (),
         };
 

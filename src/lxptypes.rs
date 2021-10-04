@@ -2,21 +2,21 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // Some Enums for lxpapi
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[allow(dead_code)]
 pub enum ColorPrint {
     Color,
     BlackAndWhite,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[allow(dead_code)]
 pub enum Mode {
     Simplex,
     Duplex,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 #[allow(dead_code)]
 pub enum Ship {
     National,
