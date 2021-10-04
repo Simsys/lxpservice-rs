@@ -138,7 +138,7 @@ impl LxpCommands {
             Some(jobs) => {
                 let mut sum_cost: f64 = 0.0;
                 info!(
-                    "\n{:<10} {:>6} {:>3} {:>3} {:>3} {:>3} {:>4} {:<35}",
+                    "\n{:<10} {:>8} {:>3} {:>3} {:>3} {:>3} {:>4} {:<35}",
                     "Date", "Id", "Pgs", "Col", "Dpx", "Shp", "Cost", "Filename"
                 );
                 for (_key, job) in jobs {
@@ -146,7 +146,7 @@ impl LxpCommands {
                         job.cost.parse::<f64>().unwrap() + job.cost_vat.parse::<f64>().unwrap();
                     sum_cost += cost;
                     info!(
-                        "{:<10} {:>6} {:>3} {:>3} {:>3} {:>3} {:>4.2} {:<35}",
+                        "{:<10} {:>8} {:>3} {:>3} {:>3} {:>3} {:>4.2} {:<35}",
                         &job.date[..10],
                         &job.jid,
                         &job.pages,
@@ -192,7 +192,7 @@ impl LxpCommands {
         );
 
         match self._job_show_lists().await {
-            Ok(()) => {}
+            Ok(()) => (),
             Err(e) => error!("Error in rest service {}", e),
         }
     }
@@ -202,7 +202,7 @@ impl LxpCommands {
             Ok(r) => match r.status {
                 200 => info!("  Job id {} {} deleted", id, file_name),
                 404 => error!("Job Id {} not found", id),
-                _ => error!("Don't know wat to do with status {}", r.status),
+                _ => error!("Don't know what to do with status {}", r.status),
             },
             Err(e) => error!("Error in server connection {}", e),
         }
@@ -292,7 +292,7 @@ impl LxpCommands {
                                     }                                
                                 }
                             })
-                        ).buffer_unordered(10).collect::<Vec<()>>();  // 10 concurrent async requests
+                        ).buffer_unordered(10).collect::<Vec<()>>();  // up to 10 concurrent async requests
                         puts.await;
                     }
                 }
