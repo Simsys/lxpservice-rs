@@ -292,7 +292,7 @@ impl LxpCommands {
                                     }                                
                                 }
                             })
-                        ).buffer_unordered(10).collect::<Vec<()>>();  // up to 10 concurrent async requests
+                        ).buffer_unordered(5).collect::<Vec<()>>();  // up to 5 concurrent async requests
                         puts.await;
                     }
                 }
