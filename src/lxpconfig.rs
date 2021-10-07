@@ -97,10 +97,10 @@ impl LxpConfig {
     pub fn switch_profile(&mut self, profile_name: &str) {
         match self.profiles.get(profile_name) {
             Some(_v) => {
-                info!("Active profile to {} switched", profile_name);
+                info!("Active profile switched to '{}'", profile_name);
                 self.profile_active = Some(profile_name.into())
             }
-            None => error!("Could not switch to profile {}: not found", profile_name), // exits app
+            None => error!("Could not switch to profile '{}': not found", profile_name), // exits app
         }
         confy::store(&self.app_name, &self).expect("Failed to write config file");
     }
