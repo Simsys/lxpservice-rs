@@ -135,19 +135,51 @@ deleted. You can also switch between them.
                     Arg::with_name("black_and_white")
                         .short("b")
                         .long("black_and_white")
-                        .help("Send black and white printed letters"),
+                        .help("Black and white print (default: color print)"),
                 )
                 .arg(
                     Arg::with_name("international")
                         .short("i")
                         .long("international")
-                        .help("Send letters to international destinations"),
+                        .help("International destinations (default: national)"),
                 )
                 .arg(
                     Arg::with_name("duplex")
                         .short("d")
                         .long("duplex")
-                        .help("Send double sided printed letters"),
+                        .help("Print on both sides (default: one side)"),
+                ),
+        )
+        // Define subcommand set
+        .subcommand(
+            SubCommand::with_name("daemonize")
+                .about("Start lxp service as a daemon")
+                .after_help("
+Starts lxp as a daemon in the background. PDF files saved to the monitored 
+directory are automatically uploaded as a letter job. Parameters with which 
+the jobs are printed and sent are specified with the daemon call.")
+                .arg(
+                    Arg::with_name("directory")
+                        .required(true)
+                        .help("Supervised directory"),
+                )
+                .arg(
+                    Arg::with_name("black_and_white")
+                        .short("b")
+                        .long("black_and_white")
+                        .help("Black and white print (default: color print)"),
+                )
+                .arg(
+                    Arg::with_name("international")
+                        .short("i")
+                        .long("international")
+                        .help("International destinations (default: national)"),
+                )
+                .arg(
+                    Arg::with_name("duplex")
+                        .short("d")
+                        .long("duplex")
+                        .help("Print on both sides (default: one side)"),
                 ),
         )
         .get_matches()

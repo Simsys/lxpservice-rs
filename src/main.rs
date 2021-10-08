@@ -42,7 +42,7 @@ async fn main() {
     // handle subcommand invoice
     if let Some(matches) = matches.subcommand_matches("invoice") {
         if matches.is_present("list") {
-            lxp_cmds.invoide_list().await;
+            lxp_cmds.invoice_list().await;
         }
         if matches.is_present("current") {
             lxp_cmds.invoice_get_last().await;
@@ -90,6 +90,26 @@ async fn main() {
         let file_or_dir_name = &matches.value_of("file_or_dir").unwrap().to_string();
         lxp_cmds
             .job_set_file_or_dir(&file_or_dir_name, color, mode, ship)
+            .await;
+    }
+
+    // handle subcommand daemonize
+    if let Some(matches) = matches.subcommand_matches("daemonize") {
+        let color = match matches.is_present("black_and_white") {
+            true => lxptypes::ColorPrint::BlackAndWhite,
+            false => lxptypes::ColorPrint::Color, 
+        };
+        let mode = match matches.is_present("international") {
+            true => lxptypes::Mode::Duplex,
+            false => lxptypes::Mode::Simplex,
+        };
+        let ship = match matches.is_present("duplex") {
+            true => lxptypes::Ship::International,
+            false => lxptypes::Ship::National,
+        };
+        let dir_name = &matches.value_of("directory").unwrap().to_string();
+        lxp_cmds
+            .watch_dir(&dir_name, color, mode, ship)
             .await;
     }
 }

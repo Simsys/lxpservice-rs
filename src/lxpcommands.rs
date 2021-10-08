@@ -3,9 +3,12 @@ use crate::lxpapi;
 use crate::lxpconfig;
 use crate::lxptypes;
 use log::*;
-use std::fs::File;
+use std::fs;
 use std::io::prelude::*;
 use futures::{stream, StreamExt};
+use notify::{Watcher, RecursiveMode, watcher};
+use std::sync::mpsc::channel;
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct LxpCommands {
@@ -50,7 +53,7 @@ impl LxpCommands {
             "New profile {}, user '{}', url '{}' and <api_key>",
             profile_name, user_name, url
         );
-        info!("Active profile ist set to '{}'", profile_name);
+        info!("Active profile is set to '{}'", profile_name);
         let profile = lxpconfig::Profile {
             user_name: user_name.into(),
             url: url.into(),
@@ -82,7 +85,7 @@ impl LxpCommands {
                 let file_name: String =
                     format!("{}_{}-invoice.pdf", invoice.invoicedate, &profile_name);
                 info!("Writing file '{}'", file_name);
-                let mut buffer = File::create(file_name).expect("Could not create PDF file");
+                let mut buffer = fs::File::create(file_name).expect("Could not create PDF file");
                 buffer
                     .write_all(&pdf_file)
                     .expect("Could not write PDF file");
@@ -91,7 +94,7 @@ impl LxpCommands {
         }
     }
 
-    pub async fn invoide_list(&mut self) {
+    pub async fn invoice_list(&mut self) {
         match self.api().list_invoices().await {
             Ok(r) => match &r.invoices {
                 Some(invoices) => {
@@ -299,5 +302,67 @@ impl LxpCommands {
             }
             Err(e) => error!("Opening send file: {}", e),
         };
+    }
+    pub async fn watch_dir(
+        &mut self,
+        dir_name: &str,
+        color: lxptypes::ColorPrint,
+        mode: lxptypes::Mode,
+        ship: lxptypes::Ship,
+    ) {
+        debug!("Watch directory '{}' for new PDF files", &dir_name);
+        let watch_dir = std::path::Path::new(&dir_name);
+        fs::create_dir_all(&watch_dir).expect("Could not create watch_dir");
+
+        let (tx, rx) = channel();
+
+        // Create a watcher object, delivering debounced events.
+        let mut watcher = watcher(tx, Duration::from_secs(10)).unwrap();
+    
+        // Add a path to be watched and monitored for changes.
+        watcher.watch(&dir_name, RecursiveMode::NonRecursive).unwrap();
+    
+        loop {
+            let pdf_path = match rx.recv() {
+                Ok(event) => {
+                    match event {
+                        notify::DebouncedEvent::Create(pb) => {
+                            match pb.extension() {
+                                Some(ext) => if ext.to_ascii_lowercase() == "pdf" {
+                                    Some(pb)
+                                } else {
+                                    None
+                                },
+                                None => None, 
+                            }
+                        },
+                       _ => None,
+                    }
+                },
+                Err(e) => {
+                    trace!("watch error: {:?}", e);
+                    None
+                },
+            };
+
+            match pdf_path {
+                Some(from_path) => {
+                    // push pdf file to print service
+                    match self.api().set_job(from_path.to_str().unwrap(), &color, &mode, &ship).await {
+                        Ok(_r) => info!("File {:#?} sent", &from_path),
+                        Err(_) => (), // Error message was already issued by set_job()
+                    }
+
+                    // move pdf filt to sent directory
+                    let file_name = from_path.file_name().unwrap();
+                    let to_path = from_path.parent().unwrap().join("sent").join(&file_name);
+                    match fs::rename(&from_path, &to_path) {
+                        Ok(_) => trace!("Move {:#?} to directory sent", &from_path),
+                        Err(e) => error!("Could not move PDF file {}", e),
+                    };
+                },
+                None => (),
+            }
+        }
     }
 }
