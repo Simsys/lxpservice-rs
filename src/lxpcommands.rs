@@ -20,15 +20,15 @@ impl LxpCommands {
     pub fn new(app_name: &str, verbose_level: u64) -> LxpCommands {
         match verbose_level {
             0 => {
-                logger::init(app_name, LevelFilter::Info).unwrap();
+                logger::init(app_name, LevelFilter::Info);
                 debug!("Verbose Flag is not set");
             }
             1 => {
-                logger::init(app_name, LevelFilter::Debug).unwrap();
+                logger::init(app_name, LevelFilter::Debug);
                 debug!("Verbose Mode is set to DEBUG");
             }
             2 | _ => {
-                logger::init(app_name, LevelFilter::Trace).unwrap();
+                logger::init(app_name, LevelFilter::Trace);
                 debug!("Verbose Mode is set to TRACE");
             }
         }

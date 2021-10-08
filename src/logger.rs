@@ -1,7 +1,7 @@
 extern crate chrono;
 
 use chrono::prelude::*;
-use log::{Level, LevelFilter, Metadata, Record, SetLoggerError};
+use log::{Level, LevelFilter, Metadata, Record};
 use std::io::prelude::*;
 
 #[derive(Clone)]
@@ -49,21 +49,16 @@ impl log::Log for AppLogger {
     fn flush(&self) {}
 }
 
-impl AppLogger {
-    fn set_max_level(&mut self, level: LevelFilter) {
-        self.max_level = level;
-    }
-}
-
-pub fn init(app_name: &str, level: LevelFilter) -> Result<(), SetLoggerError> {
-    static mut LOGGER: AppLogger = AppLogger {
-        max_level: LevelFilter::Info,
-        app_name: String::new(),
+pub fn init(app_name: &str, level: LevelFilter) { 
+    let logger = AppLogger {
+        app_name: app_name.to_string(),
+        max_level: level,
     };
-    // this is secure, because it is done once before app is started
-    unsafe {
-        LOGGER.app_name = app_name.into();
-        LOGGER.set_max_level(level);
-        log::set_logger(&LOGGER).map(|()| log::set_max_level(level))
+    match log::set_boxed_logger(std::boxed::Box::new(logger)) {
+        Ok(_) => log::set_max_level(level),
+        Err(e) => {
+            eprintln!("Couldn't initialize logger: {}", e);
+            std::process::exit(1);
+        },
     }
 }
