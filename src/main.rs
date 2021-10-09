@@ -10,10 +10,53 @@ const VERSION: &str = "0.1.1";
 
 #[tokio::main]
 async fn main() {
-    let matches = clidef::cli_definition(APP_NAME, VERSION); // Defenition of the command line interface
+    // Defenition of the command line interface
+    let matches = clidef::cli_definition(APP_NAME, VERSION); 
+
     let verbose_level = matches.occurrences_of("verbose");
+
+    let (log_dir, config_dir) = match matches.subcommand_matches("daemonize") {
+        Some(matches) => {
+            let log_dir = std::fs::canonicalize(matches.value_of("directory")
+                .unwrap()) // CLAP ensures that
+                .expect("Couldn't determine log_dir");
+            let config_dir = std::path::PathBuf::from("/etc").join(APP_NAME);
+            (log_dir, config_dir)
+        },
+        None => {
+            let log_dir = std::env::current_dir()
+                .expect("Couldn't determine log_dir");
+            let config_dir = dirs::config_dir()
+                .expect("Couldn't determine config_dir")
+                .join(APP_NAME);
+                (log_dir, config_dir)
+            },
+    };
+    println!("log_dir {:?}", log_dir);
+    println!("config_dir {:?}", config_dir);
+
     logger::init(APP_NAME, VERSION, verbose_level);
     let mut lxp_cmds = lxpcommands::LxpCommands::new(APP_NAME);
+
+    // handle subcommand daemonize
+    if let Some(matches) = matches.subcommand_matches("daemonize") {
+        let color = match matches.is_present("black_and_white") {
+            true => lxptypes::ColorPrint::BlackAndWhite,
+            false => lxptypes::ColorPrint::Color, 
+        };
+        let mode = match matches.is_present("international") {
+            true => lxptypes::Mode::Duplex,
+            false => lxptypes::Mode::Simplex,
+        };
+        let ship = match matches.is_present("duplex") {
+            true => lxptypes::Ship::International,
+            false => lxptypes::Ship::National,
+        };
+        let dir_name = &matches.value_of("directory").unwrap().to_string();
+        lxp_cmds
+            .watch_dir(&dir_name, color, mode, ship)
+            .await;
+    }
 
     // handle subcommand profile
     if let Some(matches) = matches.subcommand_matches("profile") {
@@ -89,29 +132,9 @@ async fn main() {
             true => lxptypes::Ship::International,
             false => lxptypes::Ship::National,
         };
-        let file_or_dir_name = &matches.value_of("file_or_dir").unwrap().to_string();
+        let file_or_dir_name = matches.value_of("file_or_dir").unwrap().to_string();
         lxp_cmds
             .job_set_file_or_dir(&file_or_dir_name, color, mode, ship)
-            .await;
-    }
-
-    // handle subcommand daemonize
-    if let Some(matches) = matches.subcommand_matches("daemonize") {
-        let color = match matches.is_present("black_and_white") {
-            true => lxptypes::ColorPrint::BlackAndWhite,
-            false => lxptypes::ColorPrint::Color, 
-        };
-        let mode = match matches.is_present("international") {
-            true => lxptypes::Mode::Duplex,
-            false => lxptypes::Mode::Simplex,
-        };
-        let ship = match matches.is_present("duplex") {
-            true => lxptypes::Ship::International,
-            false => lxptypes::Ship::National,
-        };
-        let dir_name = &matches.value_of("directory").unwrap().to_string();
-        lxp_cmds
-            .watch_dir(&dir_name, color, mode, ship)
             .await;
     }
 }
