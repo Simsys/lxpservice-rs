@@ -1,8 +1,7 @@
-use crate::logger;
 use crate::lxpapi;
 use crate::lxpconfig;
 use crate::lxptypes;
-use log::*;
+use log::{info, debug, trace, error};
 use std::fs;
 use std::io::prelude::*;
 use futures::{stream, StreamExt};
@@ -17,21 +16,7 @@ pub struct LxpCommands {
 }
 
 impl LxpCommands {
-    pub fn new(app_name: &str, verbose_level: u64) -> LxpCommands {
-        match verbose_level {
-            0 => {
-                logger::init(app_name, LevelFilter::Info);
-                debug!("Verbose Flag is not set");
-            }
-            1 => {
-                logger::init(app_name, LevelFilter::Debug);
-                debug!("Verbose Mode is set to DEBUG");
-            }
-            2 | _ => {
-                logger::init(app_name, LevelFilter::Trace);
-                debug!("Verbose Mode is set to TRACE");
-            }
-        }
+    pub fn new(app_name: &str) -> LxpCommands {
         let config = lxpconfig::LxpConfig::new(app_name);
         LxpCommands { config, api_ref: None }
     }

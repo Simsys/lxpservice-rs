@@ -1,6 +1,6 @@
 // Some notes on error handling in logger.rs Since this library is only used in the context
-// of the app lxpservice, errors are not returned but are handled directly in the sense of
-// the app. This simplifies the interface design to the library.
+// of the app lxp, errors are not returned but are handled directly in the sense of the app. 
+// This simplifies the interface design to the library.
 
 use log::*;
 use serde::{Deserialize, Serialize};

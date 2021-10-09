@@ -5,13 +5,15 @@ mod lxpcommands;
 mod lxpconfig;
 mod lxptypes;
 
-const APP_NAME: &str = "lxpservice";
+const APP_NAME: &str = "lxp";
+const VERSION: &str = "0.1.1";
 
 #[tokio::main]
 async fn main() {
-    let matches = clidef::cli_definition(); // Defenition of the command line interface
-
-    let mut lxp_cmds = lxpcommands::LxpCommands::new(APP_NAME, matches.occurrences_of("verbose"));
+    let matches = clidef::cli_definition(APP_NAME, VERSION); // Defenition of the command line interface
+    let verbose_level = matches.occurrences_of("verbose");
+    logger::init(APP_NAME, VERSION, verbose_level);
+    let mut lxp_cmds = lxpcommands::LxpCommands::new(APP_NAME);
 
     // handle subcommand profile
     if let Some(matches) = matches.subcommand_matches("profile") {

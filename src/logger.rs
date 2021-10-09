@@ -2,6 +2,7 @@ extern crate chrono;
 
 use chrono::prelude::*;
 use log::{Level, LevelFilter, Metadata, Record};
+use log::{info, debug};
 use std::io::prelude::*;
 
 #[derive(Clone)]
@@ -49,7 +50,13 @@ impl log::Log for AppLogger {
     fn flush(&self) {}
 }
 
-pub fn init(app_name: &str, level: LevelFilter) { 
+pub fn init(app_name: &str, version: &str, log_level: u64) {
+    let level = match log_level {
+        0 => LevelFilter::Info,
+        1 => LevelFilter::Debug,
+        2 | _ => LevelFilter::Trace,
+    };
+
     let logger = AppLogger {
         app_name: app_name.to_string(),
         max_level: level,
@@ -61,4 +68,12 @@ pub fn init(app_name: &str, level: LevelFilter) {
             std::process::exit(1);
         },
     }
+
+    match level {
+        LevelFilter::Info => debug!("Log mode is not INFO"),
+        LevelFilter::Debug => debug!("Log mode is set to DEBUG"),
+        LevelFilter::Trace => debug!("Log mode is set to TRACE"),
+        _ => log::error!("Log mode not available"), // make the compiler happy
+    }
+    info!("{} {}", app_name, version);
 }
