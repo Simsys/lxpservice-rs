@@ -71,45 +71,45 @@ impl LxpApi {
         let sub_url = format!("deleteJob/{}", id);
         let mut body = RequestLetter::default();
         body.auth = self.auth.clone();
-        self._request(RequestType::Delete, &sub_url, &body).await
+        self.delete(&sub_url, &body).await
     }
 
     pub async fn get_blance(&self) -> Result<Response, LxpApiError> {
         let mut body = RequestLetter::default();
         body.auth = self.auth.clone();
-        self._request(RequestType::Get, "getBalance", &body).await
+        self.get("getBalance", &body).await
     }
 
     pub async fn get_jobs_hold(&self) -> Result<Response, LxpApiError> {
         let mut body = RequestLetter::default();
         body.auth = self.auth.clone();
-        self._request(RequestType::Get, "getJobs/hold", &body).await
+        self.get("getJobs/hold", &body).await
     }
 
     pub async fn get_jobs_queue(&self, days: i32) -> Result<Response, LxpApiError> {
         let mut body = RequestLetter::default();
         body.auth = self.auth.clone();
         let sub_url = format!("getJobs/queue/{}", days);
-        self._request(RequestType::Get, &sub_url, &body).await
+        self.get(&sub_url, &body).await
     }
 
     pub async fn get_jobs_sent(&self, days: i32) -> Result<Response, LxpApiError> {
         let mut body = RequestLetter::default();
         body.auth = self.auth.clone();
         let sub_url = format!("getJobs/sent/{}", days);
-        self._request(RequestType::Get, &sub_url, &body).await
+        self.get(&sub_url, &body).await
     }
 
     pub async fn list_invoices(&self) -> Result<Response, LxpApiError> {
         let mut body = RequestLetter::default();
         body.auth = self.auth.clone();
-        self._request(RequestType::Get, "listInvoices", &body).await
+        self.get("listInvoices", &body).await
     }
 
     pub async fn get_last_invoice(&self) -> Result<(Response, Vec<u8>), LxpApiError> {
         let mut body = RequestLetter::default();
         body.auth = self.auth.clone();
-        let r: Response = self._request(RequestType::Get, "getInvoice", &body).await?;
+        let r: Response = self.get("getInvoice", &body).await?;
         match &r.invoice {
             Some(invoice) => {
                 let pdf_base64_data = invoice.pdf_data.clone().unwrap();
@@ -124,7 +124,7 @@ impl LxpApi {
         let mut body = RequestLetter::default();
         body.auth = self.auth.clone();
         let sub_url = format!("getInvoice/{}", id);
-        let r: Response = self._request(RequestType::Get, &sub_url, &body).await?;
+        let r: Response = self.get(&sub_url, &body).await?;
         match &r.invoice {
             Some(invoice) => {
                 let pdf_base64_data = invoice.pdf_data.clone().unwrap();
@@ -188,41 +188,46 @@ impl LxpApi {
             letter: letter,
         };
 
-        let sub_url = format!("setJob");
-        self._request(RequestType::Post, &sub_url, &body).await
+        self.post("setJob", &body).await
     }
 
-    async fn _request(
-        &self,
-        request_type: RequestType,
-        sub_url: &str,
-        body: &RequestLetter,
-    ) -> Result<Response, LxpApiError> {
+    async fn delete(&self, sub_url: &str, body: &RequestLetter) -> Result<Response, LxpApiError> {
         let url = self.url.clone() + sub_url;
         trace!("Url {}", &url);
+        trace!("body {}", serde_json::to_string(body).unwrap());
 
-        let r1 = match request_type {
-            RequestType::Delete => {
-                let r1 = self.client.delete(&url).json(body).send().await;
-                r1
-            }
-            RequestType::Get => {
-                let r1 = self.client.get(&url).json(body).send().await;
-                r1
-            }
-            RequestType::Post => {
-                let r1 = self.client.post(&url).json(body).send().await;
-                r1
-            }
-        };
+        let response = self.client.delete(&url).json(body).send().await;
+        self.handle_response(response).await
+    }
 
-        let r2 = match r1 {
+    async fn get(&self, sub_url: &str, body: &RequestLetter) -> Result<Response, LxpApiError> {
+        let url = self.url.clone() + sub_url;
+        trace!("Url {}", &url);
+        trace!("body {}", serde_json::to_string(body).unwrap());
+
+        let response = self.client.get(&url).json(body).send().await;
+        self.handle_response(response).await
+    }
+
+    async fn post(&self, sub_url: &str, body: &RequestLetter) -> Result<Response, LxpApiError> {
+        let url = self.url.clone() + sub_url;
+        trace!("Url {}", &url);
+        trace!("body {}", serde_json::to_string(body).unwrap());
+
+        let response = self.client.post(&url).json(body).send().await;
+        self.handle_response(response).await
+    }
+
+    async fn handle_response(
+        &self, 
+        response: Result<reqwest::Response, reqwest::Error>
+    ) -> Result<Response, LxpApiError> {
+        let r2 = match response {
             Ok(r) => {
                 debug!("Response received");
                 r
             }
             Err(e) => {
-                debug!("Request was: {}", serde_json::to_string(body).unwrap());
                 debug!("{}", e);
                 return Err(LxpApiError::RestError);
             }
@@ -231,7 +236,6 @@ impl LxpApi {
         let json_res = match r2.text().await {
             Ok(r) => r,
             Err(e) => {
-                debug!("Request was: {}", serde_json::to_string(body).unwrap());
                 debug!("{}", e);
                 return Err(LxpApiError::RestError);
             }

@@ -23,14 +23,6 @@ pub enum Ship {
     International,
 }
 
-#[derive(Debug)]
-#[allow(dead_code)]
-pub enum RequestType {
-    Delete,
-    Get,
-    Post,
-}
-
 // Substructures used in request and response structs
 #[allow(dead_code)]
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
