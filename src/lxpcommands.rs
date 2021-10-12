@@ -4,6 +4,7 @@ use crate::lxptypes;
 use log::{info, debug, trace, error};
 use std::fs;
 use std::io::prelude::*;
+use std::path::PathBuf;
 use futures::{stream, StreamExt};
 use notify::{Watcher, RecursiveMode, watcher};
 use std::sync::mpsc::channel;
@@ -16,8 +17,8 @@ pub struct LxpCommands {
 }
 
 impl LxpCommands {
-    pub fn new(app_name: &str) -> LxpCommands {
-        let config = lxpconfig::LxpConfig::new(app_name);
+    pub fn new(config_dir: &PathBuf) -> LxpCommands {
+        let config = lxpconfig::LxpConfig::new(config_dir);
         LxpCommands { config, api_ref: None }
     }
 
@@ -290,14 +291,17 @@ impl LxpCommands {
     }
     pub async fn watch_dir(
         &mut self,
-        dir_name: &str,
+        dir_name: &PathBuf,
         color: lxptypes::ColorPrint,
         mode: lxptypes::Mode,
         ship: lxptypes::Ship,
     ) {
-        debug!("Watch directory '{}' for new PDF files", &dir_name);
+        debug!("Watch directory '{:#?}' for new PDF files", &dir_name);
         let watch_dir = std::path::Path::new(&dir_name);
-        fs::create_dir_all(&watch_dir).expect("Could not create watch_dir");
+        match fs::create_dir_all(&watch_dir) {
+            Ok(_) => (),
+            Err(e) => error!("Could not create watch_dir {:#?}, error {}", &watch_dir, e),
+        }
 
         let (tx, rx) = channel();
 
@@ -305,7 +309,10 @@ impl LxpCommands {
         let mut watcher = watcher(tx, Duration::from_secs(10)).unwrap();
     
         // Add a path to be watched and monitored for changes.
-        watcher.watch(&dir_name, RecursiveMode::NonRecursive).unwrap();
+        match watcher.watch(&dir_name, RecursiveMode::NonRecursive) {
+            Ok(_) => (),
+            Err(e) => error!("Couldn't watch '{:#?}', error {}", &dir_name, e)
+        };
     
         loop {
             let pdf_path = match rx.recv() {

@@ -5,22 +5,22 @@ mod lxpcommands;
 mod lxpconfig;
 mod lxptypes;
 
-const APP_NAME: &str = "lxp";
-const VERSION: &str = "0.1.1";
+use log::{info, debug};
+use clap::{crate_name, crate_version};
 
 #[tokio::main]
 async fn main() {
     // Defenition of the command line interface
-    let matches = clidef::cli_definition(APP_NAME, VERSION); 
+    let matches = clidef::cli_definition(crate_name!(), crate_version!()); 
 
     let verbose_level = matches.occurrences_of("verbose");
 
-    let (log_dir, config_dir) = match matches.subcommand_matches("daemonize") {
+    let (log_dir, config_dir) = match matches.subcommand_matches("watch-dir") {
         Some(matches) => {
             let log_dir = std::fs::canonicalize(matches.value_of("directory")
                 .unwrap()) // CLAP ensures that
                 .expect("Couldn't determine log_dir");
-            let config_dir = std::path::PathBuf::from("/etc").join(APP_NAME);
+            let config_dir = std::path::PathBuf::from("/etc").join(crate_name!());
             (log_dir, config_dir)
         },
         None => {
@@ -28,18 +28,20 @@ async fn main() {
                 .expect("Couldn't determine log_dir");
             let config_dir = dirs::config_dir()
                 .expect("Couldn't determine config_dir")
-                .join(APP_NAME);
-                (log_dir, config_dir)
-            },
+                .join(crate_name!());
+            (log_dir, config_dir)
+        },
     };
-    println!("log_dir {:?}", log_dir);
-    println!("config_dir {:?}", config_dir);
 
-    logger::init(APP_NAME, VERSION, verbose_level);
-    let mut lxp_cmds = lxpcommands::LxpCommands::new(APP_NAME);
+    logger::init(crate_name!(), &log_dir, verbose_level);
+    info!("{} {}", crate_name!(), crate_version!());
+    debug!("log_dir {:?}", log_dir);
+    debug!("config_dir {:?}", config_dir);
 
-    // handle subcommand daemonize
-    if let Some(matches) = matches.subcommand_matches("daemonize") {
+    let mut lxp_cmds = lxpcommands::LxpCommands::new(&config_dir);
+
+    // handle subcommand watch-dir
+    if let Some(matches) = matches.subcommand_matches("watch-dir") {
         let color = match matches.is_present("black_and_white") {
             true => lxptypes::ColorPrint::BlackAndWhite,
             false => lxptypes::ColorPrint::Color, 
@@ -52,9 +54,9 @@ async fn main() {
             true => lxptypes::Ship::International,
             false => lxptypes::Ship::National,
         };
-        let dir_name = &matches.value_of("directory").unwrap().to_string();
+//        let dir_name = &matches.value_of("directory").unwrap().to_string();
         lxp_cmds
-            .watch_dir(&dir_name, color, mode, ship)
+            .watch_dir(&log_dir, color, mode, ship)
             .await;
     }
 

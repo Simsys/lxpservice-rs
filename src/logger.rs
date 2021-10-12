@@ -2,13 +2,13 @@ extern crate chrono;
 
 use chrono::prelude::*;
 use log::{Level, LevelFilter, Metadata, Record};
-use log::{info, debug};
-use std::io::prelude::*;
+use log::debug;
+use std::{path::PathBuf, io::Write};
 
 #[derive(Clone)]
 struct AppLogger {
     max_level: LevelFilter,
-    app_name: String,
+    log_file_path: PathBuf,
 }
 
 impl log::Log for AppLogger {
@@ -19,12 +19,11 @@ impl log::Log for AppLogger {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             // Write to log File
-            let file_name = self.app_name.clone() + ".log";
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create(true)
                 .append(true)
-                .open(&file_name)
+                .open(&self.log_file_path)
                 .unwrap();
 
             let local = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
@@ -50,7 +49,7 @@ impl log::Log for AppLogger {
     fn flush(&self) {}
 }
 
-pub fn init(app_name: &str, version: &str, log_level: u64) {
+pub fn init(app_name: &str, log_dir: &PathBuf, log_level: u64) {
     let level = match log_level {
         0 => LevelFilter::Info,
         1 => LevelFilter::Debug,
@@ -58,7 +57,7 @@ pub fn init(app_name: &str, version: &str, log_level: u64) {
     };
 
     let logger = AppLogger {
-        app_name: app_name.to_string(),
+        log_file_path: log_dir.join(&(app_name.to_string() + ".log")),
         max_level: level,
     };
     match log::set_boxed_logger(std::boxed::Box::new(logger)) {
@@ -75,5 +74,4 @@ pub fn init(app_name: &str, version: &str, log_level: u64) {
         LevelFilter::Trace => debug!("Log mode is set to TRACE"),
         _ => log::error!("Log mode not available"), // make the compiler happy
     }
-    info!("{} {}", app_name, version);
 }

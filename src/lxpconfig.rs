@@ -5,6 +5,9 @@
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use clap::crate_name;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Profile {
@@ -14,38 +17,56 @@ pub struct Profile {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct LxpConfig {
-    app_name: String,
+pub struct Profiles {
     profile_active: Option<String>,
     profiles: HashMap<String, Profile>,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct LxpConfig {
+    config_path: PathBuf,
+    profiles: Profiles,
+}
+
 impl LxpConfig {
-    pub fn new(app_name: &str) -> LxpConfig {
-        match confy::load::<LxpConfig>(app_name) {
-            Err(_e) => {
-                let lxp_config = LxpConfig {
-                    app_name: app_name.into(),
-                    profile_active: None,
-                    profiles: HashMap::new(),
-                };
-                confy::store(app_name, &lxp_config).expect("Failed to write config file");
-                error!("Could not read conifg file, new one created"); // exits app
-                return lxp_config;
-            }
-            Ok(mut lxp_config) => {
-                if lxp_config.app_name == "" {  // Set app_name on first run
-                    lxp_config.app_name = String::from(app_name);
-                    confy::store(app_name, &lxp_config).expect("Failed to write config file");
+    pub fn new(config_dir: &PathBuf) -> LxpConfig {
+        if fs::create_dir_all(config_dir).is_err() {
+            error!("Could not create config directory");
+        }
+
+        let mut config_path: PathBuf = config_dir.clone().join(crate_name!());
+        config_path.set_extension("toml");
+
+        let mut lxp_config = LxpConfig::default();
+
+        let profiles = match fs::read_to_string(&config_path) {
+            Ok(s) => {
+                match toml::from_str::<Profiles>(&s) {
+                    Ok(profiles) => profiles,
+                    Err(_) => Profiles::default(),
                 }
-                return lxp_config;
-            }
+            },
+            Err(_) => Profiles::default(),
         };
+
+        lxp_config.config_path = config_path;
+        lxp_config.profiles = profiles;
+        lxp_config
+    }
+
+    fn store(&self) {
+        match toml::to_string_pretty(&self.profiles) {
+            Ok(toml_str) => 
+                if fs::write(&self.config_path, &toml_str).is_err() {
+                    error!("LxpConfig: Can't write config to file, path {:#?}", self.config_path);
+                },
+            Err(_) => error!("LxpConfig: Can't serialize config"),
+        }
     }
 
     pub fn get_active_profile(&self) -> Option<Profile> {
-        match &self.profile_active {
-            Some(pa) => Some(self.profiles[pa].clone()),
+        match &self.profiles.profile_active {
+            Some(pa) => Some(self.profiles.profiles[pa].clone()),
             None => {
                 error!("LxpConfig: no active profile found");
                 None
@@ -54,64 +75,64 @@ impl LxpConfig {
     }
 
     pub fn get_active_profile_name(&self) -> Option<String> {
-        self.profile_active.clone()
+        self.profiles.profile_active.clone()
     }
 
     pub fn new_profile(&mut self, profile_name: &str, profile: Profile) {
-        self.profiles.insert(profile_name.into(), profile);
-        self.profile_active = Some(profile_name.into());
-        confy::store(&self.app_name, &self).expect("Failed to write config file");
+        self.profiles.profiles.insert(profile_name.into(), profile);
+        self.profiles.profile_active = Some(profile_name.into());
+        self.store()
     }
 
     pub fn delete_all_profiles(&mut self) {
-        self.profiles = HashMap::new();
-        self.profile_active = None;
-        confy::store(&self.app_name, &self).expect("Failed to write config file");
+        self.profiles.profiles = HashMap::new();
+        self.profiles.profile_active = None;
+        self.store()
     }
 
     pub fn delete_profile(&mut self, profile_name: &str) {
-        match self.profiles.remove(profile_name) {
+        match self.profiles.profiles.remove(profile_name) {
             Some(_p) => {
-                match self.profiles.keys().cloned().next() {
+                match self.profiles.profiles.keys().cloned().next() {
                     Some(pnew) => {
                         info!(
                             "Profile {} deleted, profile {} activated",
                             profile_name, pnew
                         );
-                        self.profile_active = pnew.into();
+                        self.profiles.profile_active = pnew.into();
                     }
                     None => {
                         info!(
                             "Profile {} deleted. No profile activated, because none is available",
                             profile_name
                         );
-                        self.profile_active = None;
+                        self.profiles.profile_active = None;
                     }
                 };
-                confy::store(&self.app_name, &self).expect("Failed to write config file");
+                self.store()
             }
             None => error!("Could not delete profile {}: not found", profile_name), // exits app
         }
     }
 
     pub fn switch_profile(&mut self, profile_name: &str) {
-        match self.profiles.get(profile_name) {
+        match self.profiles.profiles.get(profile_name) {
             Some(_v) => {
                 info!("Active profile switched to '{}'", profile_name);
-                self.profile_active = Some(profile_name.into())
+                self.profiles.profile_active = Some(profile_name.into())
             }
             None => error!("Could not switch to profile '{}': not found", profile_name), // exits app
-        }
-        confy::store(&self.app_name, &self).expect("Failed to write config file");
+        }        
+        self.store()
     }
 
     pub fn show_profiles(&self) {
-        match &self.profile_active {
+        match &self.profiles.profile_active {
             Some(pn) => info!("Active profile '{}'", pn),
             None => info!("<No profile active>"),
         }
         info!("\n{:<15} {:<30} {}", "<profile>", "<user>", "<url>");
-        for (profile_name, profile) in &self.profiles {
+        for (profile_name, profile) in &self.profiles.profiles {
             info!(
                 "{:<15} {:<30} {}",
                 profile_name, profile.user_name, profile.url
