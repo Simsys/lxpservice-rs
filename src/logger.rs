@@ -1,11 +1,7 @@
-extern crate chrono;
-
-use chrono::prelude::*;
-use log::{Level, LevelFilter, Metadata, Record};
-use log::debug;
+use chrono::offset::Local;
+use log::{debug, Level, LevelFilter, Metadata, Record};
 use std::{path::PathBuf, io::Write};
 
-#[derive(Clone)]
 struct AppLogger {
     max_level: LevelFilter,
     log_file_path: PathBuf,
@@ -18,13 +14,14 @@ impl log::Log for AppLogger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
+
             // Write to log File
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create(true)
                 .append(true)
                 .open(&self.log_file_path)
-                .unwrap();
+                .expect("Can't open logfile");
 
             let local = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
             let s = format!("{} {} - {}\n", &local, record.level(), record.args());
@@ -69,7 +66,7 @@ pub fn init(app_name: &str, log_dir: &PathBuf, log_level: u64) {
     }
 
     match level {
-        LevelFilter::Info => debug!("Log mode is not INFO"),
+        LevelFilter::Info => debug!("Log mode is set to INFO"),
         LevelFilter::Debug => debug!("Log mode is set to DEBUG"),
         LevelFilter::Trace => debug!("Log mode is set to TRACE"),
         _ => log::error!("Log mode not available"), // make the compiler happy
